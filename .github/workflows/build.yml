@@ -21,11 +21,13 @@ jobs:
           cp index.html bantai.jpg www/
       - run: npx cap add android
       - run: npx cap sync android
-      - name: Add mic permissions
+      - name: Native code and permissions
         run: |
+          cp BantaiPlugin.java MainActivity.java android/app/src/main/java/com/bantai/app/
           M=android/app/src/main/AndroidManifest.xml
-          sed -i 's#<application#<queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <application#' $M
-          grep -n "RECORD_AUDIO" $M
+          sed -i 's#<application#<queries><intent><action android:name="android.speech.RecognitionService" /></intent><intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent></queries>\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />\n    <application#' $M
+          grep -n "SET_ALARM" $M
+          ls android/app/src/main/java/com/bantai/app/
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
         with:
