@@ -1,4 +1,4 @@
-name: Build APK
+ name: Build APK
 on:
   workflow_dispatch:
   push:
@@ -24,7 +24,7 @@ jobs:
       - name: Add mic permissions
         run: |
           M=android/app/src/main/AndroidManifest.xml
-          sed -i 's#<application#<uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <application#' $M
+          sed -i 's#<application#<queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <application#' $M
           grep -n "RECORD_AUDIO" $M
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
