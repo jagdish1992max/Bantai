@@ -45,7 +45,6 @@ button.s{background:#14142a;color:#9aa4c7;border:1px solid #2a2a4a;border-radius
   <button class="s" id="save" style="margin-top:14px;width:100%">Save</button>
 </div>
 
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","three/examples/jsm/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","@pixiv/three-vrm":"https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.0.0/lib/three-vrm.module.js"}}</script>
 <script>
 const $=id=>document.getElementById(id);
 const L=k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}};
@@ -176,89 +175,102 @@ function startWake(){
 function stopWake(){if(rec){const r=rec;rec=null;r.onend=null;try{r.stop()}catch(e){}}}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!ws){stopWake();startWake()}});
 startWake();
-</script>
-<script type="module">
-import * as THREE from 'three';
-import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
-import {VRMLoaderPlugin,VRMUtils} from '@pixiv/three-vrm';
-const stage=document.getElementById('stage');
-try{
-  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
-  renderer.setSize(window.innerWidth,window.innerHeight);
-  stage.appendChild(renderer.domElement);
-  const scene=new THREE.Scene();
-  const cam=new THREE.PerspectiveCamera(30,window.innerWidth/window.innerHeight,0.1,20);
-  cam.position.set(0,1.2,1.9);
-  const dl=new THREE.DirectionalLight(0xffffff,Math.PI);dl.position.set(1,1,1.5);scene.add(dl);
-  scene.add(new THREE.AmbientLight(0xffffff,0.6));
-  const root=new THREE.Group();scene.add(root);
-  let vrm=null,head=null,spine=null,uy=0,drag=false,lx=0;
-  const armDown=side=>{
-    const h=vrm.humanoid,u=h.getNormalizedBoneNode(side+'UpperArm'),l=h.getNormalizedBoneNode(side+'LowerArm');
-    if(!u||!l)return;
-    const k=side==='left'?-1:1;
-    u.rotation.z=k*1.15;scene.updateMatrixWorld(true);
-    const a=new THREE.Vector3(),b=new THREE.Vector3();u.getWorldPosition(a);l.getWorldPosition(b);
-    if(b.y>a.y-0.05){u.rotation.z=-k*1.15;scene.updateMatrixWorld(true)}
+
+/* ===== ANIMATED CHARACTER (image based) ===== */
+(function(){
+  const cv=document.createElement('canvas');
+  cv.style.cssText='width:100%;height:100%;display:block;touch-action:none';
+  $('stage').appendChild(cv);
+  const ctx=cv.getContext('2d');
+  const img=new Image();
+  let W=0,H=0,dpr=1,patch=null,skin=['#7b5239','#7b5239'];
+  function size(){dpr=Math.min(window.devicePixelRatio||1,2);W=window.innerWidth;H=window.innerHeight;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+  size();window.addEventListener('resize',size);
+  img.onerror=()=>{$('st').textContent='bantai.jpg nahi mili. Repo mein daal'};
+  img.onload=()=>{
+    try{
+      const t=document.createElement('canvas');t.width=t.height=1;
+      const tc=t.getContext('2d');
+      [[500,301],[585,301]].forEach((q,i)=>{
+        tc.drawImage(img,q[0]-3,q[1]-3,6,6,0,0,1,1);
+        const d=tc.getImageData(0,0,1,1).data;
+        skin[i]='rgb('+d[0]+','+d[1]+','+d[2]+')';
+      });
+    }catch(e){}
+    patch=true;
   };
-  const loader=new GLTFLoader();
-  loader.register(p=>new VRMLoaderPlugin(p));
-  loader.load('bantai.vrm',gltf=>{
-    vrm=gltf.userData.vrm;
-    VRMUtils.rotateVRM0(vrm);
-    vrm.scene.traverse(o=>{o.frustumCulled=false});
-    root.add(vrm.scene);
-    scene.updateMatrixWorld(true);
-    head=vrm.humanoid.getNormalizedBoneNode('head');
-    spine=vrm.humanoid.getNormalizedBoneNode('spine');
-    armDown('left');armDown('right');
-    const p=new THREE.Vector3();head.getWorldPosition(p);
-    const ty=p.y-0.25;
-    cam.position.set(0,ty+0.05,1.9);cam.lookAt(0,ty,0);
-    if(!ws)$('st').textContent='Tap kar aur bol';
-  },x=>{
-    if(x.total&&!ws)$('st').textContent='Character load ho raha hai '+Math.round(x.loaded/x.total*100)+'%';
-  },()=>{
-    $('st').textContent='bantai.vrm file nahi mili. Repo mein daal';
-  });
-  const cv=renderer.domElement;
+  img.src='bantai.jpg';
+
+  const sm=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t)};
+  const fy=y=>y<=381?0:y<399?sm((y-381)/18):y<=450?1:y<476?1-sm((y-450)/26):0;
+  const fx=x=>{const a=Math.abs(x-549);return a<=28?1:a>=68?0:1-sm((a-28)/40)};
+  let uy=0,drag=false,lx=0,lv=0,nextBlink=2,lastBlink=-9;
+  const data=new Uint8Array(256);
   cv.addEventListener('pointerdown',e=>{drag=true;lx=e.clientX;try{cv.setPointerCapture(e.pointerId)}catch(_){}});
   cv.addEventListener('pointermove',e=>{if(!drag)return;uy+=(e.clientX-lx)*0.008;uy=Math.max(-1,Math.min(1,uy));lx=e.clientX});
   const up=()=>{drag=false};
   cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
-  window.addEventListener('resize',()=>{
-    cam.aspect=window.innerWidth/window.innerHeight;cam.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth,window.innerHeight);
-  });
-  const clock=new THREE.Clock(),data=new Uint8Array(256);
-  let lv=0,nextBlink=2,lastBlink=-1;
-  const loop=()=>{
-    requestAnimationFrame(loop);
-    const dt=Math.min(clock.getDelta(),0.1),t=clock.elapsedTime;
-    if(vrm){
-      let raw=0;
-      if(an){an.getByteTimeDomainData(data);let s=0;for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;s+=v*v}raw=Math.min(1,Math.sqrt(s/data.length)*5)}
-      lv+=(raw-lv)*0.4;
-      const em=vrm.expressionManager;
-      if(em){
-        em.setValue('aa',Math.min(1,lv*1.3));
-        if(t>nextBlink){lastBlink=t;nextBlink=t+2+Math.random()*3}
-        const bp=t-lastBlink;
-        em.setValue('blink',bp>=0&&bp<0.18?Math.sin(bp/0.18*Math.PI):0);
-      }
-      if(spine)spine.rotation.x=Math.sin(t*1.2)*0.015;
-      if(head){head.rotation.y=Math.sin(t*0.7)*0.08;head.rotation.x=lv*0.06}
-      if(!drag)uy*=0.985;
-      root.rotation.y=uy;
-      vrm.update(dt);
+
+  function frame(ts){
+    requestAnimationFrame(frame);
+    const t=ts/1000;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.fillStyle='#07070d';ctx.fillRect(0,0,W,H);
+    if(!patch)return;
+    let raw=0;
+    if(an){
+      an.getByteTimeDomainData(data);
+      let s=0;for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;s+=v*v}
+      raw=Math.min(1,Math.sqrt(s/data.length)*5);
     }
-    renderer.render(scene,cam);
-  };
-  loop();
-}catch(err){
-  stage.style.display='none';
-}
+    lv+=(raw-lv)*0.45;
+    if(!drag)uy*=0.985;
+    const s=Math.max(W/1024,H*0.9/1024)*1.04;
+    let ox=W/2-540*s;ox=Math.min(0,Math.max(W-1024*s,ox));
+    const br=Math.sin(t*1.3)*0.004;
+    ctx.save();
+    ctx.translate(ox+540*s+uy*14,700*s);
+    ctx.rotate(uy*0.03);
+    ctx.scale(1+br,1+br);
+    ctx.translate(-540*s,-700*s);
+    ctx.scale(s,s);
+    ctx.drawImage(img,0,0);
+    const d=lv*11;
+    if(d>0.3){
+      const T=4;
+      for(let y=381;y<476;y+=T){
+        for(let x=470;x<630;x+=T){
+          const fxv=fx(x+T/2);
+          if(fxv<=0)continue;
+          const d0=d*fxv*fy(y),d1=d*fxv*fy(y+T);
+          ctx.drawImage(img,x,y,T,T,x,y+d0,T,T+(d1-d0)+0.5);
+        }
+      }
+      ctx.fillStyle='#2b0d0d';ctx.beginPath();
+      ctx.ellipse(549,382+d*0.45,20,d*0.45+0.5,0,0,Math.PI*2);ctx.fill();
+    }
+    if(t>nextBlink){lastBlink=t;nextBlink=t+2.5+Math.random()*3.5}
+    const bp=t-lastBlink,bl=bp>=0&&bp<0.16?Math.sin(bp/0.16*Math.PI):0;
+    if(bl>0.05){
+      [[500,287],[585,286]].forEach((q,i)=>{
+        ctx.save();
+        ctx.shadowColor=skin[i];ctx.shadowBlur=3;
+        ctx.fillStyle=skin[i];
+        ctx.beginPath();ctx.ellipse(q[0],q[1],23,9*bl+0.5,0,0,Math.PI*2);ctx.fill();
+        ctx.restore();
+        if(bl>0.7){
+          ctx.strokeStyle='rgba(20,10,5,0.6)';ctx.lineWidth=1.2;
+          ctx.beginPath();ctx.ellipse(q[0],q[1]+1,21,3,0,0,Math.PI);ctx.stroke();
+        }
+      });
+    }
+    ctx.restore();
+    const g=ctx.createLinearGradient(0,H*0.5,0,H);
+    g.addColorStop(0,'rgba(7,7,13,0)');g.addColorStop(0.7,'rgba(7,7,13,0.85)');g.addColorStop(1,'rgba(7,7,13,0.97)');
+    ctx.fillStyle=g;ctx.fillRect(0,H*0.5,W,H*0.5);
+  }
+  requestAnimationFrame(frame);
+})();
 </script>
 </body>
 </html>
