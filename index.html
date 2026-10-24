@@ -49,7 +49,7 @@ button.s{background:#14142a;color:#9aa4c7;border:1px solid #2a2a4a;border-radius
 const $=id=>document.getElementById(id);
 const L=k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}};
 const W=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
-const SYS=`Tu Bantai hai, Mumbai ka ek mast tapori dost. Hamesha Hinglish mein bol (Hindi + thoda English), tapori andaaz mein: "apun", "bhidu", "ek number", "kaiko", "bindaas", "chill maar", "faltu ka tension nai lene ka". Jawab chhote rakh, 1-3 line mein, bolne wale andaaz mein. Mazaakiya aur dost jaisa reh, lekin kabhi gaali ya bhadda mazaak nahi. Agar koi seriously pareshan ho to pyaar se aur seedha baat kar. Sahi jawab de, andaze se jhooth mat bol.`;
+const SYS=`Tu Bantai hai, Mumbai ka ek mast tapori dost. Hamesha Hinglish mein bol (Hindi + thoda English), tapori andaaz mein: "apun", "bhidu", "ek number", "kaiko", "bindaas", "chill maar", "faltu ka tension nai lene ka". Jawab chhote rakh, 1-3 line mein, bolne wale andaaz mein. Mazaakiya aur dost jaisa reh, lekin kabhi gaali ya bhadda mazaak nahi. Agar koi seriously pareshan ho to pyaar se aur seedha baat kar. Sahi jawab de, andaze se jhooth mat bol. Tere paas phone control tools hain (torch, alarm, timer, app kholna, call, SMS, WhatsApp, maps, volume, camera). Jab user aisa kuch bole to turant tool use kar aur ek chhote tapori line mein bata de. Call sirf dialer kholta hai, khud call nahi lagata. Number na ho to pooch.`;
 const WAKE_RX=/bant(a|aa|ai|ay|aay|ay)i?|बंटाई|बंटाय|बनताई|बांटाई|बंटाइ/i;
 
 $('key').value=L('b_key');
@@ -67,6 +67,38 @@ $('save').onclick=()=>{
 };
 
 let an=null,ws=null,ready=false,inCtx=null,outCtx=null,stream=null,node=null,src=null,next=0,sources=[],q=Promise.resolve(),buf=[],bufLen=0;
+
+const TOOLS=[
+ {name:'torch',description:'Phone ki torch/flashlight on ya off kare',parameters:{type:'OBJECT',properties:{on:{type:'BOOLEAN',description:'true=on, false=off'}},required:['on']}},
+ {name:'set_alarm',description:'Alarm set kare (24 ghante format)',parameters:{type:'OBJECT',properties:{hour:{type:'NUMBER'},minute:{type:'NUMBER'},label:{type:'STRING'}},required:['hour','minute']}},
+ {name:'set_timer',description:'Countdown timer set kare',parameters:{type:'OBJECT',properties:{seconds:{type:'NUMBER'},label:{type:'STRING'}},required:['seconds']}},
+ {name:'open_app',description:'Phone mein installed app kholna, naam se (jaise YouTube, WhatsApp, Camera)',parameters:{type:'OBJECT',properties:{name:{type:'STRING'}},required:['name']}},
+ {name:'call',description:'Number ka dialer kholna (khud call nahi lagata)',parameters:{type:'OBJECT',properties:{number:{type:'STRING'}},required:['number']}},
+ {name:'send_sms',description:'SMS likh ke taiyaar kare, user bhejega',parameters:{type:'OBJECT',properties:{number:{type:'STRING'},message:{type:'STRING'}},required:['number']}},
+ {name:'send_whatsapp',description:'WhatsApp chat message ke saath khole',parameters:{type:'OBJECT',properties:{number:{type:'STRING'},message:{type:'STRING'}},required:['number']}},
+ {name:'open_maps',description:'Maps mein jagah search kare',parameters:{type:'OBJECT',properties:{query:{type:'STRING'}},required:['query']}},
+ {name:'set_volume',description:'Media volume percent mein set kare',parameters:{type:'OBJECT',properties:{percent:{type:'NUMBER'}},required:['percent']}},
+ {name:'open_camera',description:'Camera kholna',parameters:{type:'OBJECT',properties:{}}}
+];
+const BR=()=>{const C=window.Capacitor;return (C&&C.isNativePlatform&&C.isNativePlatform()&&C.Plugins&&C.Plugins.Bantai)||null};
+async function runTool(n,a){
+  const B=BR();
+  if(!B)return {error:'Ye sirf Android APK mein chalta hai'};
+  const S=v=>String(v==null?'':v);
+  let r;
+  if(n==='torch')r=await B.torch({on:S(a.on!==false)});
+  else if(n==='set_alarm')r=await B.alarm({hour:S(a.hour),minute:S(a.minute),label:S(a.label||'Bantai')});
+  else if(n==='set_timer')r=await B.timer({seconds:S(a.seconds),label:S(a.label||'Bantai')});
+  else if(n==='open_app')r=await B.openApp({name:S(a.name)});
+  else if(n==='call')r=await B.dial({number:S(a.number)});
+  else if(n==='send_sms')r=await B.sms({number:S(a.number),message:S(a.message)});
+  else if(n==='send_whatsapp')r=await B.whatsapp({number:S(a.number),message:S(a.message)});
+  else if(n==='open_maps')r=await B.maps({query:S(a.query)});
+  else if(n==='set_volume')r=await B.volume({percent:S(a.percent)});
+  else if(n==='open_camera')r=await B.camera({});
+  else return {error:'unknown tool'};
+  return Object.assign({result:'ok'},r||{});
+}
 
 function b64(ab){let s='';const u=new Uint8Array(ab);for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)}
 function unb64(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u.buffer}
@@ -120,7 +152,8 @@ async function start(){
       model:'models/'+model,
       generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:L('b_voice')||'Charon'}}}},
       systemInstruction:{parts:[{text:SYS}]},
-      inputAudioTranscription:{},outputAudioTranscription:{}
+      inputAudioTranscription:{},outputAudioTranscription:{},
+      tools:[{functionDeclarations:TOOLS}]
     }}));
   };
   ws.onmessage=e=>{q=q.then(()=>handle(e.data)).catch(()=>{})};
@@ -135,6 +168,16 @@ async function handle(d){
   if(d instanceof Blob)d=await d.text();
   const m=JSON.parse(d);
   if(m.setupComplete){ready=true;$('orb').classList.add('on');$('orb').textContent='SUN RAHA HOON';$('st').textContent='Bol bindaas!';$('me').textContent='';$('ai').textContent=''}
+  if(m.toolCall&&m.toolCall.functionCalls){
+    const rs=[];
+    for(const f of m.toolCall.functionCalls){
+      let r;
+      try{r=await runTool(f.name,f.args||{})}catch(e){r={error:String((e&&e.message)||e)}}
+      rs.push({id:f.id,name:f.name,response:r});
+    }
+    if(ws&&ws.readyState===1)ws.send(JSON.stringify({toolResponse:{functionResponses:rs}}));
+    return;
+  }
   const sc=m.serverContent;if(!sc)return;
   if(sc.interrupted)flush();
   if(sc.modelTurn&&sc.modelTurn.parts)for(const p of sc.modelTurn.parts)if(p.inlineData&&p.inlineData.data)play(p.inlineData.data);
