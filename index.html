@@ -160,7 +160,28 @@ function cleanup(){
 $('orb').onclick=()=>{ws?cleanup():start()};
 
 let rec=null;
+const NSR=()=>{const C=window.Capacitor;return (C&&C.isNativePlatform&&C.isNativePlatform()&&C.Plugins&&C.Plugins.SpeechRecognition)||null};
+let nativeWake=false,nH=[];
+const NOPT={language:'hi-IN',maxResults:3,partialResults:true,popup:false};
+async function startWakeNative(sr){
+  if(nativeWake||L('b_wake')!=='1'||ws)return;
+  try{
+    const pm=await sr.requestPermissions();
+    if(pm&&pm.speechRecognition&&pm.speechRecognition!=='granted'){$('st').textContent='Mic permission allow kar';return}
+    nativeWake=true;
+    nH.push(await sr.addListener('partialResults',d=>{
+      const t=((d&&d.matches)||[]).join(' ');
+      if(nativeWake&&WAKE_RX.test(t)){stopWake();start()}
+    }));
+    nH.push(await sr.addListener('listeningState',e=>{
+      if(e&&e.status==='stopped'&&nativeWake&&!ws)setTimeout(()=>{if(nativeWake&&!ws)sr.start(NOPT).catch(()=>{})},400);
+    }));
+    await sr.start(NOPT);
+    $('st').textContent='"Hey bantai" bol, apun sun raha hai';
+  }catch(e){nativeWake=false;$('st').textContent='Wake word error: '+(e.message||e)}
+}
 function startWake(){
+  const sr=NSR();if(sr){startWakeNative(sr);return}
   const R=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!R||L('b_wake')!=='1'||ws||rec)return;
   rec=new R();rec.lang='hi-IN';rec.continuous=true;rec.interimResults=true;
@@ -172,7 +193,9 @@ function startWake(){
   rec.onerror=()=>{};
   try{rec.start();$('st').textContent='"Hey bantai" bol, apun sun raha hai'}catch(e){rec=null}
 }
-function stopWake(){if(rec){const r=rec;rec=null;r.onend=null;try{r.stop()}catch(e){}}}
+function stopWake(){
+  if(nativeWake){nativeWake=false;const sr=NSR();nH.forEach(h=>{try{h.remove()}catch(e){}});nH=[];if(sr)sr.stop().catch(()=>{})}
+ if(rec){const r=rec;rec=null;r.onend=null;try{r.stop()}catch(e){}}}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!ws){stopWake();startWake()}});
 startWake();
 
