@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bantai</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:#07070d;color:#e8eaf6;font-family:system-ui,sans-serif}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px;text-align:center}
+h1{margin:0;font-size:26px;letter-spacing:3px}
+#orb{width:170px;height:170px;border-radius:50%;border:0;cursor:pointer;color:#fff;font-size:15px;font-weight:600;
+background:radial-gradient(circle at 35% 30%,#67e8f9,#0891b2 55%,#164e63);box-shadow:0 0 40px #06b6d466;transition:.3s}
+#orb.on{background:radial-gradient(circle at 35% 30%,#fde68a,#f59e0b 55%,#92400e);box-shadow:0 0 60px #f59e0b99;animation:p 1.4s infinite}
+@keyframes p{50%{transform:scale(1.07)}}
+#st{min-height:22px;font-size:14px;color:#9aa4c7}
+#tx{min-height:60px;max-width:420px;font-size:15px;line-height:1.4}
+#me{color:#67e8f9}
+button.s{background:#14142a;color:#9aa4c7;border:1px solid #2a2a4a;border-radius:10px;padding:10px 16px;font-size:14px}
+#cfg{display:none;width:100%;max-width:420px;background:#0e0e1c;border:1px solid #2a2a4a;border-radius:14px;padding:16px;text-align:left}
+#cfg label{display:block;font-size:12px;color:#9aa4c7;margin:10px 0 4px}
+#cfg input[type=text],#cfg input[type=password]{width:100%;padding:10px;border-radius:8px;border:1px solid #2a2a4a;background:#07070d;color:#fff;font-size:14px}
+#cfg .r{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:14px}
+</style>
+</head>
+<body>
+<h1>BANTAI</h1>
+<button id="orb">TAP KAR</button>
+<div id="st">Pehle settings mein API key daal</div>
+<div id="tx"><div id="me"></div><div id="ai"></div></div>
+<button class="s" id="gear">⚙ Settings</button>
+
+<div id="cfg">
+  <label>GEMINI API KEY (sirf tere phone mein save hoti hai)</label>
+  <input type="password" id="key" placeholder="AIza...">
+  <label>MODEL</label>
+  <input type="text" id="model">
+  <label>VOICE (Charon, Fenrir, Puck, Kore)</label>
+  <input type="text" id="voice">
+  <div class="r"><span>Wake word "hey bantai" (page khula rakhna)</span><input type="checkbox" id="wake"></div>
+  <button class="s" id="save" style="margin-top:14px;width:100%">Save</button>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const L=k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}};
+const W=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const SYS=`Tu Bantai hai, Mumbai ka ek mast tapori dost. Hamesha Hinglish mein bol (Hindi + thoda English), tapori andaaz mein: "apun", "bhidu", "ek number", "kaiko", "bindaas", "chill maar", "faltu ka tension nai lene ka". Jawab chhote rakh, 1-3 line mein, bolne wale andaaz mein. Mazaakiya aur dost jaisa reh, lekin kabhi gaali ya bhadda mazaak nahi. Agar koi seriously pareshan ho to pyaar se aur seedha baat kar. Sahi jawab de, andaze se jhooth mat bol.`;
+const WAKE_RX=/bant(a|aa|ai|ay|aay|ay)i?|बंटाई|बंटाय|बनताई|बांटाई|बंटाइ/i;
+
+$('key').value=L('b_key');
+$('model').value=L('b_model')||'gemini-3.8-live';
+$('voice').value=L('b_voice')||'Charon';
+$('wake').checked=L('b_wake')==='1';
+if(L('b_key'))$('st').textContent='Tap kar aur bol';
+
+$('gear').onclick=()=>{const c=$('cfg');c.style.display=c.style.display==='block'?'none':'block'};
+$('save').onclick=()=>{
+  W('b_key',$('key').value.trim());W('b_model',$('model').value.trim()||'gemini-3.8-live');
+  W('b_voice',$('voice').value.trim()||'Charon');W('b_wake',$('wake').checked?'1':'0');
+  $('cfg').style.display='none';$('st').textContent='Save ho gaya. Tap kar aur bol';
+  stopWake();startWake();
+};
+
+let ws=null,ready=false,inCtx=null,outCtx=null,stream=null,node=null,src=null,next=0,sources=[],q=Promise.resolve(),buf=[],bufLen=0;
+
+function b64(ab){let s='';const u=new Uint8Array(ab);for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)}
+function unb64(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u.buffer}
+
+function play(data){
+  if(!outCtx)return;
+  const i16=new Int16Array(unb64(data));
+  const f=new Float32Array(i16.length);
+  for(let i=0;i<i16.length;i++)f[i]=i16[i]/32768;
+  const ab=outCtx.createBuffer(1,f.length,24000);ab.copyToChannel(f,0);
+  const s=outCtx.createBufferSource();s.buffer=ab;s.connect(outCtx.destination);
+  const t=Math.max(outCtx.currentTime,next);s.start(t);next=t+ab.duration;
+  sources.push(s);s.onended=()=>{sources=sources.filter(x=>x!==s)};
+}
+function flush(){sources.forEach(s=>{try{s.stop()}catch(e){}});sources=[];next=0}
+
+async function start(){
+  if(ws)return;
+  const key=L('b_key');
+  if(!key){$('cfg').style.display='block';$('st').textContent='Pehle API key daal bhidu';return}
+  stopWake();
+  $('st').textContent='Connect ho raha hai...';
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    inCtx=new AudioContext({sampleRate:16000});
+    outCtx=new AudioContext({sampleRate:24000});
+    await inCtx.resume();await outCtx.resume();
+    const code=`class P extends AudioWorkletProcessor{process(i){const c=i[0]&&i[0][0];if(c){const o=new Int16Array(c.length);for(let k=0;k<c.length;k++){const s=Math.max(-1,Math.min(1,c[k]));o[k]=s<0?s*32768:s*32767}this.port.postMessage(o.buffer,[o.buffer])}return true}}registerProcessor('p',P)`;
+    const url=URL.createObjectURL(new Blob([code],{type:'application/javascript'}));
+    await inCtx.audioWorklet.addModule(url);
+    src=inCtx.createMediaStreamSource(stream);
+    node=new AudioWorkletNode(inCtx,'p');
+    node.port.onmessage=e=>{
+      if(!ready||!ws||ws.readyState!==1)return;
+      buf.push(new Int16Array(e.data));bufLen+=buf[buf.length-1].length;
+      if(bufLen>=1600){
+        const all=new Int16Array(bufLen);let o=0;for(const b of buf){all.set(b,o);o+=b.length}
+        buf=[];bufLen=0;
+        ws.send(JSON.stringify({realtimeInput:{audio:{data:b64(all.buffer),mimeType:'audio/pcm;rate=16000'}}}));
+      }
+    };
+    src.connect(node);
+  }catch(err){
+    $('st').textContent='Mic/audio error: '+(err.message||err);cleanup();startWake();return;
+  }
+  const model=L('b_model')||'gemini-3.8-live';
+  ws=new WebSocket('wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key='+encodeURIComponent(key));
+  ws.onopen=()=>{
+    ws.send(JSON.stringify({setup:{
+      model:'models/'+model,
+      generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:L('b_voice')||'Charon'}}}},
+      systemInstruction:{parts:[{text:SYS}]},
+      inputAudioTranscription:{},outputAudioTranscription:{}
+    }}));
+  };
+  ws.onmessage=e=>{q=q.then(()=>handle(e.data)).catch(()=>{})};
+  ws.onerror=()=>{$('st').textContent='Connection error. Key/model/internet check kar'};
+  ws.onclose=ev=>{
+    const msg=ev.reason?('Band: '+ev.reason):'Session band ho gaya';
+    cleanup();$('st').textContent=msg;startWake();
+  };
+}
+
+async function handle(d){
+  if(d instanceof Blob)d=await d.text();
+  const m=JSON.parse(d);
+  if(m.setupComplete){ready=true;$('orb').classList.add('on');$('orb').textContent='SUN RAHA HOON';$('st').textContent='Bol bindaas!';$('me').textContent='';$('ai').textContent=''}
+  const sc=m.serverContent;if(!sc)return;
+  if(sc.interrupted)flush();
+  if(sc.modelTurn&&sc.modelTurn.parts)for(const p of sc.modelTurn.parts)if(p.inlineData&&p.inlineData.data)play(p.inlineData.data);
+  if(sc.inputTranscription&&sc.inputTranscription.text){
+    if(fresh){$('me').textContent='';$('ai').textContent='';fresh=false}
+    $('me').textContent+=sc.inputTranscription.text;
+  }
+  if(sc.outputTranscription&&sc.outputTranscription.text)$('ai').textContent+=sc.outputTranscription.text;
+  if(sc.turnComplete)fresh=true;
+}
+let fresh=false;
+
+function cleanup(){
+  ready=false;flush();buf=[];bufLen=0;
+  try{if(ws&&ws.readyState<2)ws.close()}catch(e){}ws=null;
+  try{node&&node.disconnect();src&&src.disconnect()}catch(e){}node=null;src=null;
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+  if(inCtx){inCtx.close().catch(()=>{});inCtx=null}
+  if(outCtx){outCtx.close().catch(()=>{});outCtx=null}
+  $('orb').classList.remove('on');$('orb').textContent='TAP KAR';
+}
+
+$('orb').onclick=()=>{ws?cleanup():start()};
+
+let rec=null;
+function startWake(){
+  const R=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!R||L('b_wake')!=='1'||ws||rec)return;
+  rec=new R();rec.lang='hi-IN';rec.continuous=true;rec.interimResults=true;
+  rec.onresult=e=>{
+    let t='';for(let i=e.resultIndex;i<e.results.length;i++)t+=e.results[i][0].transcript+' ';
+    if(WAKE_RX.test(t)){stopWake();start()}
+  };
+  rec.onend=()=>{if(rec&&!ws){try{rec.start()}catch(e){}}};
+  rec.onerror=()=>{};
+  try{rec.start();$('st').textContent='"Hey bantai" bol, apun sun raha hai'}catch(e){rec=null}
+}
+function stopWake(){if(rec){const r=rec;rec=null;r.onend=null;try{r.stop()}catch(e){}}}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!ws){stopWake();startWake()}});
+startWake();
+</script>
+</body>
+</html>
