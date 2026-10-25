@@ -23,6 +23,30 @@ jobs:
       - run: npx cap sync android
       - name: Native code and permissions
         run: |
+        
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+
+          permissions = """
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+          """
+          s = s.replace("<application", permissions + "\n    <application", 1)
+
+          service = """
+              <service
+                  android:name=".BantaiBackgroundService"
+                  android:exported="false"
+                  android:foregroundServiceType="microphone" />
+          """
+          s = s.replace("</application>", service + "\n    </application>", 1)
+
+          p.write_text(s)
+          PY
+
           cp BantaiPlugin.java MainActivity.java android/app/src/main/java/com/bantai/app/
           cp BantaiBackgroundService.java android/app/src/main/java/com/bantai/app/
           M=android/app/src/main/AndroidManifest.xml
