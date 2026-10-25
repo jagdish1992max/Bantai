@@ -209,7 +209,7 @@ public class BantaiPlugin extends Plugin {
       if (Build.VERSION.SDK_INT >= 33 && c.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
         getActivity().requestPermissions(new String[] { android.Manifest.permission.POST_NOTIFICATIONS }, 77);
       }
-      Intent i = new Intent(c, WakeService.class);
+      Intent i = new Intent(c, BantaiWake.class);
       if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i);
       else c.startService(i);
       call.resolve();
@@ -221,7 +221,7 @@ public class BantaiPlugin extends Plugin {
   @PluginMethod
   public void stopWake(PluginCall call) {
     try {
-      getContext().stopService(new Intent(getContext(), WakeService.class));
+      getContext().stopService(new Intent(getContext(), BantaiWake.class));
       call.resolve();
     } catch (Exception e) {
       call.reject(String.valueOf(e.getMessage()));
@@ -231,8 +231,8 @@ public class BantaiPlugin extends Plugin {
   @PluginMethod
   public void consumeWake(PluginCall call) {
     JSObject r = new JSObject();
-    r.put("wake", WakeService.pendingWake);
-    WakeService.pendingWake = false;
+    r.put("wake", BantaiWake.pendingWake);
+    BantaiWake.pendingWake = false;
     call.resolve(r);
   }
 
