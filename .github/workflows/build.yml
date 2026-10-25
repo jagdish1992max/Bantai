@@ -23,35 +23,11 @@ jobs:
       - run: npx cap sync android
       - name: Native code and permissions
         run: |
-        
-          python3 - <<'PY'
-          from pathlib import Path
-
-          p = Path("android/app/src/main/AndroidManifest.xml")
-          s = p.read_text()
-
-          permissions = """
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-          """
-          s = s.replace("<application", permissions + "\n    <application", 1)
-
-          service = """
-              <service
-                  android:name=".BantaiBackgroundService"
-                  android:exported="false"
-                  android:foregroundServiceType="microphone" />
-          """
-          s = s.replace("</application>", service + "\n    </application>", 1)
-
-          p.write_text(s)
-          PY
-
-          cp BantaiPlugin.java MainActivity.java android/app/src/main/java/com/bantai/app/
-          cp BantaiBackgroundService.java android/app/src/main/java/com/bantai/app/
+          cp BantaiPlugin.java MainActivity.java WakeService.java android/app/src/main/java/com/bantai/app/
           M=android/app/src/main/AndroidManifest.xml
-          sed -i 's#<application#<queries><intent><action android:name="android.speech.RecognitionService" /></intent><intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent></queries>\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />\n    <application#' $M
-          grep -n "SET_ALARM" $M
+          sed -i 's#<application#<queries><intent><action android:name="android.speech.RecognitionService" /></intent><intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent></queries>\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />\n    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <application#' $M
+          sed -i 's#</application>#<service android:name=".WakeService" android:exported="false" android:foregroundServiceType="microphone" />\n    </application>#' $M
+          grep -n "SET_ALARM\|WakeService\|FOREGROUND_SERVICE_MICROPHONE" $M
           ls android/app/src/main/java/com/bantai/app/
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
