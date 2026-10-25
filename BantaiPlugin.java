@@ -193,4 +193,32 @@ public class BantaiPlugin extends Plugin {
       call.reject(String.valueOf(e.getMessage()));
     }
   }
+
+  @PluginMethod
+  public void startBackground(PluginCall call) {
+    try {
+      Intent intent = new Intent(getContext(), BantaiBackgroundService.class);
+
+      if (android.os.Build.VERSION.SDK_INT >= 26) {
+        getContext().startForegroundService(intent);
+      } else {
+        getContext().startService(intent);
+      }
+
+      call.resolve();
+    } catch (Exception e) {
+      call.reject("Background service start nahi hua: " + e.getMessage());
+    }
+  }
+
+  @PluginMethod
+  public void stopBackground(PluginCall call) {
+    try {
+      Intent intent = new Intent(getContext(), BantaiBackgroundService.class);
+      getContext().stopService(intent);
+      call.resolve();
+    } catch (Exception e) {
+      call.reject("Background service stop nahi hua: " + e.getMessage());
+    }
+  }
 }
