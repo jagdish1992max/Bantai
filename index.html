@@ -42,6 +42,7 @@ button.s{background:#14142a;color:#9aa4c7;border:1px solid #2a2a4a;border-radius
   <label>VOICE (Charon, Fenrir, Puck, Kore)</label>
   <input type="text" id="voice">
   <div class="r"><span>Wake word "hey bantai" (page khula rakhna)</span><input type="checkbox" id="wake"></div>
+  <div class="r"><span>Background mode (screen band hone par bhi sune, sirf APK)</span><input type="checkbox" id="bg"></div>
   <button class="s" id="save" style="margin-top:14px;width:100%">Save</button>
 </div>
 
@@ -56,14 +57,15 @@ $('key').value=L('b_key');
 $('model').value=L('b_model')||'gemini-3.8-live';
 $('voice').value=L('b_voice')||'Charon';
 $('wake').checked=L('b_wake')==='1';
+$('bg').checked=L('b_bg')==='1';
 if(L('b_key'))$('st').textContent='Tap kar aur bol';
 
 $('gear').onclick=()=>{const c=$('cfg');c.style.display=c.style.display==='block'?'none':'block'};
 $('save').onclick=()=>{
   W('b_key',$('key').value.trim());W('b_model',$('model').value.trim()||'gemini-3.8-live');
-  W('b_voice',$('voice').value.trim()||'Charon');W('b_wake',$('wake').checked?'1':'0');
+  W('b_voice',$('voice').value.trim()||'Charon');W('b_wake',$('wake').checked?'1':'0');W('b_bg',$('bg').checked?'1':'0');
   $('cfg').style.display='none';$('st').textContent='Save ho gaya. Tap kar aur bol';
-  stopWake();startWake();
+  stopWake();startWake();bgSetup();
 };
 
 let an=null,ws=null,ready=false,inCtx=null,outCtx=null,stream=null,node=null,src=null,next=0,sources=[],q=Promise.resolve(),buf=[],bufLen=0;
@@ -120,6 +122,7 @@ async function start(){
   const key=L('b_key');
   if(!key){$('cfg').style.display='block';$('st').textContent='Pehle API key daal bhidu';return}
   stopWake();
+  {const B1=BR();if(B1)B1.setBusy({on:'true'}).catch(()=>{});}
   $('st').textContent='Connect ho raha hai...';
   try{
     stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
@@ -192,6 +195,7 @@ let fresh=false;
 
 function cleanup(){
   ready=false;flush();buf=[];bufLen=0;an=null;
+  {const B0=BR();if(B0)B0.setBusy({on:'false'}).catch(()=>{});}
   try{if(ws&&ws.readyState<2)ws.close()}catch(e){}ws=null;
   try{node&&node.disconnect();src&&src.disconnect()}catch(e){}node=null;src=null;
   if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
@@ -239,7 +243,45 @@ function startWake(){
 function stopWake(){
   if(nativeWake){nativeWake=false;const sr=NSR();nH.forEach(h=>{try{h.remove()}catch(e){}});nH=[];if(sr)sr.stop().catch(()=>{})}
  if(rec){const r=rec;rec=null;r.onend=null;try{r.stop()}catch(e){}}}
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!ws){stopWake();startWake()}});
+async function bgSetup(){
+  const B=BR(),sr=NSR();
+  if(!B)return;
+  if(L('b_bg')==='1'){
+    try{
+      if(sr){
+        const pm=await sr.requestPermissions();
+        if(pm&&pm.speechRecognition&&pm.speechRecognition!=='granted'){$('st').textContent='Mic permission allow kar';return}
+      }
+      const o=await B.overlay({request:'false'});
+      if(!o.granted){
+        $('st').textContent='"Display over other apps" allow kar, phir wapas aa';
+        await B.overlay({request:'true'});
+      }
+      await B.startWake();
+    }catch(e){$('st').textContent='Background error: '+((e&&e.message)||e)}
+  }else{
+    try{await B.stopWake()}catch(e){}
+  }
+}
+async function checkWake(){
+  const B=BR();
+  if(!B||ws)return false;
+  try{
+    const w=await B.consumeWake();
+    if(w&&w.wake){stopWake();start();return true}
+  }catch(e){}
+  return false;
+}
+document.addEventListener('visibilitychange',async()=>{
+  if(document.hidden){stopWake();return}
+  if(await checkWake())return;
+  if(!ws){stopWake();startWake()}
+});
+setTimeout(async()=>{
+  if(await checkWake())return;
+  const B=BR();
+  if(B&&L('b_bg')==='1')B.startWake().catch(()=>{});
+},1200);
 startWake();
 
 /* ===== ANIMATED CHARACTER (image based) ===== */

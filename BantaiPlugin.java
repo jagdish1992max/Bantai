@@ -8,6 +8,8 @@ import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
 import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
 import android.provider.AlarmClock;
 import android.provider.MediaStore;
 import com.getcapacitor.JSObject;
@@ -194,31 +196,58 @@ public class BantaiPlugin extends Plugin {
     }
   }
 
+
+
+
+
+
+
   @PluginMethod
-  public void startBackground(PluginCall call) {
+  public void startWake(PluginCall call) {
     try {
-      Intent intent = new Intent(getContext(), BantaiBackgroundService.class);
-
-      if (android.os.Build.VERSION.SDK_INT >= 26) {
-        getContext().startForegroundService(intent);
-      } else {
-        getContext().startService(intent);
+      Context c = getContext();
+      if (Build.VERSION.SDK_INT >= 33 && c.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        getActivity().requestPermissions(new String[] { android.Manifest.permission.POST_NOTIFICATIONS }, 77);
       }
-
+      Intent i = new Intent(c, WakeService.class);
+      if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i);
+      else c.startService(i);
       call.resolve();
     } catch (Exception e) {
-      call.reject("Background service start nahi hua: " + e.getMessage());
+      call.reject(String.valueOf(e.getMessage()));
     }
   }
 
   @PluginMethod
-  public void stopBackground(PluginCall call) {
+  public void stopWake(PluginCall call) {
     try {
-      Intent intent = new Intent(getContext(), BantaiBackgroundService.class);
-      getContext().stopService(intent);
+      getContext().stopService(new Intent(getContext(), WakeService.class));
       call.resolve();
     } catch (Exception e) {
-      call.reject("Background service stop nahi hua: " + e.getMessage());
+      call.reject(String.valueOf(e.getMessage()));
+    }
+  }
+
+  @PluginMethod
+  public void consumeWake(PluginCall call) {
+    JSObject r = new JSObject();
+    r.put("wake", WakeService.pendingWake);
+    WakeService.pendingWake = false;
+    call.resolve(r);
+  }
+
+  @PluginMethod
+  public void overlay(PluginCall call) {
+    try {
+      boolean ok = Settings.canDrawOverlays(getContext());
+      if (!ok && "true".equals(call.getString("request", "false"))) {
+        go(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getContext().getPackageName())));
+      }
+      JSObject r = new JSObject();
+      r.put("granted", ok);
+      call.resolve(r);
+    } catch (Exception e) {
+      call.reject(String.valueOf(e.getMessage()));
     }
   }
 }
