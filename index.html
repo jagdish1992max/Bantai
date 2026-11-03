@@ -122,7 +122,7 @@ async function start(){
   const key=L('b_key');
   if(!key){$('cfg').style.display='block';$('st').textContent='Pehle API key daal bhidu';return}
   stopWake();
-  {const B1=BR();if(B1)B1.setBusy({on:'true'}).catch(()=>{});}
+
   $('st').textContent='Connect ho raha hai...';
   try{
     stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
