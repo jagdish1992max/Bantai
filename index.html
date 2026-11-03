@@ -195,7 +195,7 @@ let fresh=false;
 
 function cleanup(){
   ready=false;flush();buf=[];bufLen=0;an=null;
-  {const B0=BR();if(B0)B0.setBusy({on:'false'}).catch(()=>{});}
+  
   try{if(ws&&ws.readyState<2)ws.close()}catch(e){}ws=null;
   try{node&&node.disconnect();src&&src.disconnect()}catch(e){}node=null;src=null;
   if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
